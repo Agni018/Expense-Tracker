@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Force \"c:\\\\Users\\\\agniv\\\\Desktop\\\\PROJECTS\\\\Expense Tracker\" | Select-Object Mode,Length,Name; \"---JAVA---\"; try { \\(Get-Command java -ErrorAction Stop\\).Source; java -version } catch { \"no java on PATH\" }; \"JAVA_HOME=$env:JAVA_HOME\"; \"ANDROID_HOME=$env:ANDROID_HOME\"; \"ANDROID_SDK_ROOT=$env:ANDROID_SDK_ROOT\"; \"---SDK candidates---\"; Test-Path \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\"; Test-Path \"C:\\\\Android\\\\Sdk\"; \"---Gradle---\"; try { \\(Get-Command gradle -ErrorAction Stop\\).Source } catch { \"no gradle\" }; \"---Android Studio---\"; Test-Path \"C:\\\\Program Files\\\\Android\\\\Android Studio\")",
+      "PowerShell(Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,@{n='FreeGB';e={[math]::Round\\($_.FreeSpace/1GB,1\\)}},@{n='SizeGB';e={[math]::Round\\($_.Size/1GB,1\\)}})"
+    ]
+  }
+}

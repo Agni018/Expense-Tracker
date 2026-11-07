@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wallet with a rupee mark, drawn inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#33FFFFFF"
+        android:pathData="M30,38 L70,30 C73,29.4 75,31 75,34 L75,40 Z" />
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M32,38 L76,38 C79.3,38 82,40.7 82,44 L82,74 C82,77.3 79.3,80 76,80 L32,80 C28.7,80 26,77.3 26,74 L26,44 C26,40.7 28.7,38 32,38 Z" />
+    <path
+        android:fillColor="@color/launcher_background"
+        android:pathData="M66,52 L84,52 L84,66 L66,66 C62.1,66 59,62.9 59,59 C59,55.1 62.1,52 66,52 Z" />
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M67,56.5 C68.4,56.5 69.5,57.6 69.5,59 C69.5,60.4 68.4,61.5 67,61.5 C65.6,61.5 64.5,60.4 64.5,59 C64.5,57.6 65.6,56.5 67,56.5 Z" />
+    <path
+        android:fillColor="@color/launcher_background"
+        android:pathData="M36,48 L52,48 L52,51 L46.6,51 C47.4,51.8 48,52.8 48.2,54 L52,54 L52,57 L48.2,57 C47.6,60.4 45,62.6 41.4,63 L48.6,71 L44.6,71 L37.8,63.4 L37.8,60.2 L40.4,60.2 C42.8,60.2 44.4,59 44.9,57 L36,57 L36,54 L44.9,54 C44.4,52.1 42.9,51 40.4,51 L36,51 Z" />
+</vector>
