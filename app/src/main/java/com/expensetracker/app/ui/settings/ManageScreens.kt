@@ -1,12 +1,8 @@
 package com.expensetracker.app.ui.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -75,6 +70,7 @@ import com.expensetracker.app.domain.model.RuleOrigin
 import com.expensetracker.app.domain.model.TxnType
 import com.expensetracker.app.ui.Routes
 import com.expensetracker.app.ui.common.Fmt
+import com.expensetracker.app.ui.components.CategoryDialog
 import com.expensetracker.app.ui.components.ConfirmDialog
 import com.expensetracker.app.ui.components.DropdownField
 import com.expensetracker.app.ui.components.EmojiBadge
@@ -252,16 +248,6 @@ class CategoriesViewModel @Inject constructor(private val categories: CategoryRe
     fun delete(c: CategoryEntity) = viewModelScope.launch { categories.delete(c) }
 }
 
-private val palette = listOf(
-    0xFFF97316, 0xFF22C55E, 0xFFEC4899, 0xFFEAB308, 0xFFEF4444, 0xFF0EA5E9, 0xFF8B5CF6, 0xFF14B8A6,
-    0xFF6366F1, 0xFF3B82F6, 0xFFD946EF, 0xFFF43F5E, 0xFF84CC16, 0xFF64748B, 0xFFB45309, 0xFF06B6D4,
-).map { it.toInt() }
-
-private val emojiChoices = listOf(
-    "🍔", "🛒", "🛍️", "🚕", "⛽", "🛣️", "🚆", "✈️", "🏠", "💡", "🌐", "📱", "🎬", "💊", "🎓", "🔁", "🛡️", "🏦", "🤝", "🏪",
-    "💇", "📦", "📈", "🔄", "🏧", "💳", "💼", "💰", "↩️", "🧾", "🐶", "👶", "🎁", "🍺", "☕", "🏋️", "🧹", "🛠️", "⚽", "🎮",
-)
-
 @Composable
 fun CategoriesScreen(nav: NavController, vm: CategoriesViewModel = hiltViewModel()) {
     val list by vm.list.collectAsStateWithLifecycle()
@@ -297,67 +283,17 @@ fun CategoriesScreen(nav: NavController, vm: CategoriesViewModel = hiltViewModel
         }
     }
     if (adding || editing != null) {
-        CategoryDialog(editing, onDismiss = { adding = false; editing = null }, onDelete = editing?.takeIf { !it.isDefault }?.let { e -> { vm.delete(e); editing = null } }) {
+        CategoryDialog(
+            editing,
+            onDismiss = { adding = false; editing = null },
+            onDelete = editing?.takeIf { !it.isDefault }?.let { e -> { vm.delete(e); editing = null } },
+            takenNames = list.map { it.name },
+        ) {
             vm.save(it)
             adding = false
             editing = null
         }
     }
-}
-
-@Composable
-private fun CategoryDialog(existing: CategoryEntity?, onDismiss: () -> Unit, onDelete: (() -> Unit)?, onSave: (CategoryEntity) -> Unit) {
-    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
-    var emoji by remember { mutableStateOf(existing?.emoji ?: "📦") }
-    var color by remember { mutableStateOf(existing?.colorArgb ?: palette.first()) }
-    var kind by remember { mutableStateOf(existing?.kind ?: CategoryKind.EXPENSE) }
-    var archived by remember { mutableStateOf(existing?.isArchived ?: false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "New category" else "Edit category") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
-                DropdownField("Kind", kind, CategoryKind.entries, { when (it) { CategoryKind.EXPENSE -> "Spending"; CategoryKind.INCOME -> "Income"; CategoryKind.NEUTRAL -> "Not spending" } }, { kind = it })
-                Text("Icon", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    emojiChoices.forEach { e ->
-                        Box(
-                            Modifier.size(38.dp).clip(CircleShape).background(if (e == emoji) MaterialTheme.colorScheme.primaryContainer else Color.Transparent).clickable { emoji = e },
-                            contentAlignment = Alignment.Center,
-                        ) { Text(e) }
-                    }
-                }
-                Text("Colour", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    palette.forEach { c ->
-                        Box(
-                            Modifier.size(30.dp).clip(CircleShape).background(Color(c))
-                                .border(if (c == color) 3.dp else 0.dp, if (c == color) MaterialTheme.colorScheme.onSurface else Color.Transparent, CircleShape)
-                                .clickable { color = c },
-                        )
-                    }
-                }
-                if (existing != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Hide from pickers", modifier = Modifier.weight(1f))
-                        Switch(archived, { archived = it })
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = name.isNotBlank(), onClick = {
-                onSave((existing ?: CategoryEntity(name = name, emoji = emoji, colorArgb = color, kind = kind)).copy(name = name.trim(), emoji = emoji, colorArgb = color, kind = kind, isArchived = archived))
-            }) { Text("Save") }
-        },
-        dismissButton = {
-            Row {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    )
 }
 
 // ---------------------------------------------------------------- Rules

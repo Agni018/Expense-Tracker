@@ -92,7 +92,9 @@ fun AnalyticsScreen(nav: NavController, padding: PaddingValues, vm: AnalyticsVie
         if (s.slices.isNotEmpty()) {
             item {
                 SectionCard(title = "Spending by category") {
-                    DonutChart(s.slices, Modifier.fillMaxWidth(0.75f).align(Alignment.CenterHorizontally))
+                    DonutChart(s.slices, Modifier.fillMaxWidth(0.75f).align(Alignment.CenterHorizontally), onOpen = { slice ->
+                        nav.navigate(Routes.filtered(slice.label, categoryId = slice.key, start = rangeStart, end = rangeEnd))
+                    })
                     Spacer(Modifier.height(16.dp))
                     s.categoryRows.forEach { row ->
                         Row(

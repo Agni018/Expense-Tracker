@@ -54,6 +54,12 @@ Fixes made from what the smoke test showed:
 - manual merchant name being overwritten
 - content showing under the status bar
 
+## Changes (2026-11-10)
+- **Transaction filters**: a search box at the top narrows the options (a matching section title keeps all its options); Reset and Apply slide up, pinned at the bottom, once anything changes or filters are already active; Categories has a **+ New** button. All / Expenses / Income / Not spending are now chips under "Show" (the segmented row cut "Not spending" down to "Not").
+- **Categories**: the add/edit dialog is shared (`ui/components/CategoryDialog.kt`); the emoji is optional (type any emoji or pick one; none saves as 🏷️); duplicate names are blocked.
+- **Donut charts (Home, Analytics)**: tap a slice to see its total, then tap the centre ("View ›") to open that category's transactions for the period, newest first.
+- Focusing a text field in the filter sheet used to focus the Transactions search box too, so the keyboard reopened after the sheet closed; that box can no longer take focus while the sheet is open.
+
 ## Known limitations (also in README)
 - Gmail API is not used (needs a Google Cloud OAuth client); IMAP with an App Password is used instead.
 - Legacy `.xls` files are not supported; EMI principal/interest are not split automatically.

@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,14 +54,21 @@ import kotlin.math.max
 
 data class ChartSlice(val key: Long?, val label: String, val value: Long, val color: Color, val emoji: String = "")
 
-/** Animated donut chart. Tapping a segment selects it; the centre shows the selection or total. */
+/**
+ * Animated donut chart. Tapping a segment selects it; the centre shows the selection or total.
+ * With [onOpen], tapping the centre of a selected segment opens it; only segments with a
+ * positive key (a real category, not "Uncategorised" or "Others") can be opened.
+ */
 @Composable
 fun DonutChart(
     slices: List<ChartSlice>,
     modifier: Modifier = Modifier,
     centerLabel: String = "Spent",
     onSelect: (ChartSlice?) -> Unit = {},
+    onOpen: ((ChartSlice) -> Unit)? = null,
 ) {
+    val open by rememberUpdatedState(onOpen)
+    fun ChartSlice.opens() = open != null && key != null && key > 0
     val total = slices.sumOf { it.value }.coerceAtLeast(1)
     val progress = remember { Animatable(0f) }
     LaunchedEffect(slices) {
@@ -76,6 +84,11 @@ fun DonutChart(
                     val c = Offset(size.width / 2f, size.height / 2f)
                     val r = minOf(size.width, size.height) / 2f
                     val d = hypot(pos.x - c.x, pos.y - c.y)
+                    val current = selected?.let { slices.getOrNull(it) }
+                    if (d < r * 0.55f && current != null && current.opens()) {
+                        open?.invoke(current)
+                        return@detectTapGestures
+                    }
                     if (d < r * 0.55f || d > r) {
                         selected = null
                         onSelect(null)
@@ -129,7 +142,10 @@ fun DonutChart(
             )
             Text(Money.format(sel?.value ?: slices.sumOf { it.value }, showPaise = false), style = MaterialTheme.typography.titleLarge.merge(AmountStyle))
             if (sel != null) {
-                Text("${(sel.value * 100 / total)}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row {
+                    Text("${(sel.value * 100 / total)}%", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (sel.opens()) Text(" · View ›", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }

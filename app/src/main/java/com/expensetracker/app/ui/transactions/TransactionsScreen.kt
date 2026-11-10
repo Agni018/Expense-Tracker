@@ -1,5 +1,10 @@
 package com.expensetracker.app.ui.transactions
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +21,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
@@ -43,11 +51,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -58,18 +65,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.expensetracker.app.core.Money
+import com.expensetracker.app.data.db.CategoryEntity
 import com.expensetracker.app.domain.model.PaymentMethod
 import com.expensetracker.app.domain.model.PeriodPreset
 import com.expensetracker.app.domain.model.SourceType
 import com.expensetracker.app.ui.Routes
 import com.expensetracker.app.ui.common.Fmt
 import com.expensetracker.app.ui.common.PeriodSelection
+import com.expensetracker.app.ui.components.CategoryDialog
 import com.expensetracker.app.ui.components.CategoryPickerSheet
 import com.expensetracker.app.ui.components.ConfirmDialog
 import com.expensetracker.app.ui.components.DateRangeDialog
@@ -119,7 +129,9 @@ fun TransactionsScreen(nav: NavController, padding: PaddingValues, filtered: Boo
                 trailingIcon = { if (s.query.isNotEmpty()) IconButton(onClick = { vm.setQuery("") }) { Icon(Icons.Rounded.Close, "Clear") } },
                 singleLine = true,
                 shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                // Focusing a text field in the filter sheet otherwise moves focus here too, and the
+                // keyboard reopens for this box when the sheet closes.
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).focusProperties { canFocus = !showFilters },
             )
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -205,7 +217,13 @@ fun TransactionsScreen(nav: NavController, padding: PaddingValues, filtered: Boo
     }
 
     if (showFilters) {
-        FilterSheet(s, onDismiss = { showFilters = false }, onApply = { vm.setFilters(it); showFilters = false }, onReset = { vm.resetFilters(); showFilters = false })
+        FilterSheet(
+            s,
+            onDismiss = { showFilters = false },
+            onApply = { vm.setFilters(it); showFilters = false },
+            onReset = { vm.resetFilters(); showFilters = false },
+            onAddCategory = vm::addCategory,
+        )
     }
     if (pickRange) {
         DateRangeDialog(s.filters.period?.custom, onDismiss = { pickRange = false }) { range ->
@@ -231,73 +249,155 @@ fun TransactionsScreen(nav: NavController, padding: PaddingValues, filtered: Boo
     }
 }
 
+/**
+ * The search box narrows the options shown; a section whose title matches keeps all its options.
+ * Apply and Reset stay pinned at the bottom once anything changes (or filters are already active).
+ */
 @Composable
-private fun FilterSheet(s: TxnListState, onDismiss: () -> Unit, onApply: (TxnFilters) -> Unit, onReset: () -> Unit) {
+private fun FilterSheet(s: TxnListState, onDismiss: () -> Unit, onApply: (TxnFilters) -> Unit, onReset: () -> Unit, onAddCategory: (CategoryEntity) -> Unit) {
     var f by remember { mutableStateOf(s.filters) }
-    var min by remember { mutableStateOf(f.minAmountMinor?.let { Money.formatPlain(it) }.orEmpty()) }
-    var max by remember { mutableStateOf(f.maxAmountMinor?.let { Money.formatPlain(it) }.orEmpty()) }
+    val initialMin = remember { s.filters.minAmountMinor?.let { Money.formatPlain(it) }.orEmpty() }
+    val initialMax = remember { s.filters.maxAmountMinor?.let { Money.formatPlain(it) }.orEmpty() }
+    var min by remember { mutableStateOf(initialMin) }
+    var max by remember { mutableStateOf(initialMax) }
+    var search by remember { mutableStateOf("") }
+    var addingCategory by remember { mutableStateOf(false) }
+
+    val needle = search.trim()
+    fun shown(label: String) = needle.isEmpty() || label.contains(needle, ignoreCase = true)
+    fun <T> visible(title: String, options: List<T>, label: (T) -> String) = if (shown(title)) options else options.filter { shown(label(it)) }
+    val categories = visible("Categories", s.categories.values.filter { !it.isArchived }.sortedBy { it.sortOrder }) { it.name }
+    val accounts = visible("Accounts", s.accounts.values.toList()) { it.name }
+    val methods = visible("Payment method", PaymentMethod.entries) { it.label }
+    val sources = visible("Source", SourceType.entries) { it.label }
+    val flows = visible("Show", FlowFilter.entries) { it.label }
+    val showAmount = shown("Amount range (₹)")
+    val showHideFailed = shown("Hide failed and pending")
+    val noMatches = flows.isEmpty() && !showAmount && !showHideFailed && categories.isEmpty() && accounts.isEmpty() && methods.isEmpty() && sources.isEmpty()
+    val showActions = f != s.filters || min != initialMin || max != initialMax || s.filters.activeCount > 0
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding()) {
+        Column(Modifier.padding(horizontal = 20.dp)) {
             Text("Filters", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                FlowFilter.entries.forEachIndexed { i, ff ->
-                    SegmentedButton(selected = f.flow == ff, onClick = { f = f.copy(flow = ff) }, shape = SegmentedButtonDefaults.itemShape(i, FlowFilter.entries.size)) {
-                        Text(ff.label, maxLines = 1, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-            Section("Categories") {
-                s.categories.values.filter { !it.isArchived }.sortedBy { it.sortOrder }.forEach { c ->
-                    FilterChip(selected = c.id in f.categoryIds, onClick = { f = f.copy(categoryIds = f.categoryIds.toggle(c.id)) }, label = { Text("${c.emoji} ${c.name}") })
-                }
-            }
-            if (s.accounts.isNotEmpty()) {
-                Section("Accounts") {
-                    s.accounts.values.forEach { a ->
-                        FilterChip(selected = a.id in f.accountIds, onClick = { f = f.copy(accountIds = f.accountIds.toggle(a.id)) }, label = { Text(a.name) })
-                    }
-                }
-            }
-            Section("Payment method") {
-                PaymentMethod.entries.forEach { m ->
-                    FilterChip(selected = m in f.methods, onClick = { f = f.copy(methods = f.methods.toggle(m)) }, label = { Text(m.label) })
-                }
-            }
-            Section("Source") {
-                SourceType.entries.forEach { src ->
-                    FilterChip(selected = src in f.sources, onClick = { f = f.copy(sources = f.sources.toggle(src)) }, label = { Text(src.label) })
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Text("Amount range (₹)", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(min, { min = it }, label = { Text("Min") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
-                OutlinedTextField(max, { max = it }, label = { Text("Max") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
-            }
             Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Hide failed and pending", modifier = Modifier.weight(1f))
-                Switch(checked = f.hideFailed, onCheckedChange = { f = f.copy(hideFailed = it) })
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                placeholder = { Text("Search filters", maxLines = 1) },
+                leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                trailingIcon = { if (search.isNotEmpty()) IconButton(onClick = { search = "" }) { Icon(Icons.Rounded.Close, "Clear") } },
+                singleLine = true,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Box(Modifier.weight(1f, fill = false)) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding()) {
+                if (noMatches) {
+                    Spacer(Modifier.height(24.dp))
+                    Text("No filters match \"$needle\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (flows.isNotEmpty()) {
+                    Section("Show") {
+                        flows.forEach { ff ->
+                            FilterChip(selected = f.flow == ff, onClick = { f = f.copy(flow = ff) }, label = { Text(ff.label) })
+                        }
+                    }
+                }
+                if (categories.isNotEmpty()) {
+                    Section("Categories", action = {
+                        TextButton(onClick = { addingCategory = true }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                            Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("New")
+                        }
+                    }) {
+                        categories.forEach { c ->
+                            FilterChip(selected = c.id in f.categoryIds, onClick = { f = f.copy(categoryIds = f.categoryIds.toggle(c.id)) }, label = { Text("${c.emoji} ${c.name}") })
+                        }
+                    }
+                }
+                if (accounts.isNotEmpty()) {
+                    Section("Accounts") {
+                        accounts.forEach { a ->
+                            FilterChip(selected = a.id in f.accountIds, onClick = { f = f.copy(accountIds = f.accountIds.toggle(a.id)) }, label = { Text(a.name) })
+                        }
+                    }
+                }
+                if (methods.isNotEmpty()) {
+                    Section("Payment method") {
+                        methods.forEach { m ->
+                            FilterChip(selected = m in f.methods, onClick = { f = f.copy(methods = f.methods.toggle(m)) }, label = { Text(m.label) })
+                        }
+                    }
+                }
+                if (sources.isNotEmpty()) {
+                    Section("Source") {
+                        sources.forEach { src ->
+                            FilterChip(selected = src in f.sources, onClick = { f = f.copy(sources = f.sources.toggle(src)) }, label = { Text(src.label) })
+                        }
+                    }
+                }
+                if (showAmount) {
+                    Spacer(Modifier.height(16.dp))
+                    Text("Amount range (₹)", style = MaterialTheme.typography.labelLarge)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(min, { min = it }, label = { Text("Min") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                        OutlinedTextField(max, { max = it }, label = { Text("Max") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f))
+                    }
+                }
+                if (showHideFailed) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Hide failed and pending", modifier = Modifier.weight(1f))
+                        Switch(checked = f.hideFailed, onCheckedChange = { f = f.copy(hideFailed = it) })
+                    }
+                }
+                // Room to scroll the last options clear of the pinned buttons.
+                Spacer(Modifier.height(if (showActions) 88.dp else 24.dp))
             }
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PinnedActions(
+                visible = showActions,
+                onReset = onReset,
+                onApply = { onApply(f.copy(minAmountMinor = Money.parseToMinor(min), maxAmountMinor = Money.parseToMinor(max))) },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+    }
+    if (addingCategory) {
+        CategoryDialog(null, onDismiss = { addingCategory = false }, takenNames = s.categories.values.map { it.name }) {
+            onAddCategory(it)
+            addingCategory = false
+        }
+    }
+}
+
+/** Reset/Apply bar that slides up over the bottom of the filter sheet. */
+@Composable
+private fun PinnedActions(visible: Boolean, onReset: () -> Unit, onApply: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut(),
+    ) {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shadowElevation = 12.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onReset, modifier = Modifier.weight(1f)) { Text("Reset") }
-                Button(
-                    onClick = { onApply(f.copy(minAmountMinor = Money.parseToMinor(min), maxAmountMinor = Money.parseToMinor(max))) },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Apply") }
+                Button(onClick = onApply, modifier = Modifier.weight(1f)) { Text("Apply") }
             }
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+private fun Section(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     Spacer(Modifier.height(18.dp))
-    Text(title, style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        action?.invoke()
+    }
     Spacer(Modifier.height(8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
 }

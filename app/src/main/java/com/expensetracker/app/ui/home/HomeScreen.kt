@@ -135,7 +135,9 @@ fun HomeScreen(nav: NavController, padding: PaddingValues, vm: HomeViewModel = h
                     Text("No spending in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        DonutChart(s.slices, Modifier.width(150.dp))
+                        DonutChart(s.slices, Modifier.width(150.dp), onOpen = { slice ->
+                            nav.navigate(Routes.filtered(slice.label, categoryId = slice.key, start = s.range.startMillis(Fmt.zone), end = s.range.endMillisExclusive(Fmt.zone)))
+                        })
                         Spacer(Modifier.width(16.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             val total = s.slices.sumOf { it.value }.coerceAtLeast(1)

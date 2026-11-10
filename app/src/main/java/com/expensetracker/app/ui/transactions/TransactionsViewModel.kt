@@ -76,7 +76,7 @@ data class TxnListState(
 class TransactionsViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val transactions: TransactionRepository,
-    categories: CategoryRepository,
+    private val categories: CategoryRepository,
     accounts: AccountRepository,
 ) : ViewModel() {
 
@@ -173,6 +173,8 @@ class TransactionsViewModel @Inject constructor(
     fun setFilters(f: TxnFilters) { filters.value = f }
     fun resetFilters() { filters.value = initial }
     fun setPeriod(p: PeriodSelection?) = filters.update { it.copy(period = p) }
+
+    fun addCategory(c: CategoryEntity) = viewModelScope.launch { categories.save(c) }
 
     fun toggleSelection(id: Long) = selection.update { if (id in it) it - id else it + id }
     fun clearSelection() { selection.value = emptySet() }
